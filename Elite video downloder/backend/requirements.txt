@@ -1,0 +1,7 @@
+fastapi
+uvicorn
+yt-dlp
+httpx
+pydantic
+python-multipart
+aiofiles
