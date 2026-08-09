@@ -165,7 +165,19 @@ def extract_video_info(url: str) -> dict:
         "no_warnings": True,
         "skip_download": True,
         "extract_flat": False,
+        "extractor_args": {
+            "youtube": {
+                "player_client": ["ios", "android", "mweb"],
+            }
+        },
     }
+
+    # Auto-load cookies.txt if it exists (helps bypass bot detection on Render)
+    cookies_path = os.path.join(os.path.dirname(__file__), "cookies.txt")
+    if os.path.isfile(cookies_path):
+        ydl_opts["cookiefile"] = cookies_path
+        print(f"[FETCH] Using cookies from: {cookies_path}")
+
     # Point yt-dlp at our FFmpeg so it can probe formats properly
     if FFMPEG_PATH:
         ydl_opts["ffmpeg_location"] = os.path.dirname(FFMPEG_PATH)
