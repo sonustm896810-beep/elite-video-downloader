@@ -160,23 +160,30 @@ def extract_video_info(url: str) -> dict:
     For Instagram/Facebook/TikTok: if no pre-muxed video+audio formats exist,
     synthesizes merged entries by pairing best audio with each video stream.
     """
+    # Resolve cookies.txt path upfront (absolute path for reliability)
+    cookies_path = os.path.join(os.path.dirname(os.path.abspath(__file__)), "cookies.txt")
+    has_cookies = os.path.isfile(cookies_path)
+
     ydl_opts = {
         "quiet": True,
         "no_warnings": True,
         "skip_download": True,
         "extract_flat": False,
+        "ignoreerrors": False,          # Don't silently swallow extraction failures
         "extractor_args": {
             "youtube": {
-                "player_client": ["ios", "android", "mweb"],
+                # 'web' client is the most reliable; ios/android as fallbacks
+                "player_client": ["web", "ios", "android"],
             }
         },
     }
 
-    # Auto-load cookies.txt if it exists (helps bypass bot detection on Render)
-    cookies_path = os.path.join(os.path.dirname(__file__), "cookies.txt")
-    if os.path.isfile(cookies_path):
+    # Strictly pass cookies.txt when present (helps bypass bot/age-gate on Render)
+    if has_cookies:
         ydl_opts["cookiefile"] = cookies_path
         print(f"[FETCH] Using cookies from: {cookies_path}")
+    else:
+        print("[FETCH] No cookies.txt found — proceeding without cookies")
 
     # Point yt-dlp at our FFmpeg so it can probe formats properly
     if FFMPEG_PATH:
