@@ -160,9 +160,19 @@ def extract_video_info(url: str) -> dict:
     For Instagram/Facebook/TikTok: if no pre-muxed video+audio formats exist,
     synthesizes merged entries by pairing best audio with each video stream.
     """
-    # Resolve cookies.txt path upfront (absolute path for reliability)
-    cookies_path = os.path.join(os.path.dirname(os.path.abspath(__file__)), "cookies.txt")
-    has_cookies = os.path.isfile(cookies_path)
+    # Resolve cookies.txt — check the script directory first, then the project root
+    script_dir = os.path.dirname(os.path.abspath(__file__))
+    project_root = os.path.dirname(script_dir)
+    cookies_path = next(
+        (
+            p for p in (
+                os.path.join(script_dir, "cookies.txt"),
+                os.path.join(project_root, "cookies.txt"),
+            )
+            if os.path.isfile(p)
+        ),
+        None,
+    )
 
     ydl_opts = {
         "quiet": True,
@@ -170,16 +180,17 @@ def extract_video_info(url: str) -> dict:
         "skip_download": True,
         "extract_flat": False,
         "ignoreerrors": False,          # Don't silently swallow extraction failures
+        "source_address": "0.0.0.0",    # Force IPv4 — avoids IPv6 datacenter blocks
         "extractor_args": {
             "youtube": {
-                # 'web' client is the most reliable; ios/android as fallbacks
-                "player_client": ["web", "ios", "android"],
+                # Modern client fallback chain: tv → web → mweb → android → ios
+                "player_client": ["tv", "web", "mweb", "android", "ios"],
             }
         },
     }
 
     # Strictly pass cookies.txt when present (helps bypass bot/age-gate on Render)
-    if has_cookies:
+    if cookies_path:
         ydl_opts["cookiefile"] = cookies_path
         print(f"[FETCH] Using cookies from: {cookies_path}")
     else:
@@ -358,7 +369,10 @@ async def download_video(
 
     async def stream_generator():
         """Stream the remote file in chunks so we don't load it all in RAM."""
-        async with httpx.AsyncClient(follow_redirects=True, timeout=300) as client:
+        # Force IPv4 so the proxy egress matches yt-dlp's extraction
+        # (googlevideo URLs are IP-bound; IPv4/IPv6 mismatch causes 403s)
+        transport = httpx.AsyncHTTPTransport(local_address="0.0.0.0")
+        async with httpx.AsyncClient(follow_redirects=True, timeout=300, transport=transport) as client:
             async with client.stream("GET", url) as response:
                 response.raise_for_status()
                 async for chunk in response.aiter_bytes(chunk_size=1024 * 256):
@@ -413,7 +427,10 @@ async def merge_download(
         print(f"\n[MERGE] Starting merge for: {safe_title}")
 
         # Download video and audio streams in parallel
-        async with httpx.AsyncClient(follow_redirects=True, timeout=300) as client:
+        # Force IPv4 so the proxy egress matches yt-dlp's extraction
+        # (googlevideo URLs are IP-bound; IPv4/IPv6 mismatch causes 403s)
+        transport = httpx.AsyncHTTPTransport(local_address="0.0.0.0")
+        async with httpx.AsyncClient(follow_redirects=True, timeout=300, transport=transport) as client:
             # Download video stream
             print(f"[MERGE] Downloading video stream...")
             async with client.stream("GET", video_url) as resp:
